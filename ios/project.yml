@@ -6,10 +6,29 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
 
+# ComposableArchitecture is the real dependency. The other pointfree
+# packages are already in TCA's graph; we declare their products explicitly
+# because our code references their symbols through TCA's @_exported
+# re-exports (@Dependency, IdentifiedArray, case paths, @DependencyClient).
+# Xcode builds package products as dynamic frameworks when the app and the
+# test bundle both link them, and then autolinking cannot resolve
+# undeclared products — every directly-referenced module must be listed.
 packages:
   ComposableArchitecture:
     url: https://github.com/pointfreeco/swift-composable-architecture
     from: "1.17.0"
+  Dependencies:
+    url: https://github.com/pointfreeco/swift-dependencies
+    from: "1.4.0"
+  CasePaths:
+    url: https://github.com/pointfreeco/swift-case-paths
+    from: "1.5.0"
+  IdentifiedCollections:
+    url: https://github.com/pointfreeco/swift-identified-collections
+    from: "1.1.0"
+  ConcurrencyExtras:
+    url: https://github.com/pointfreeco/swift-concurrency-extras
+    from: "1.2.0"
 
 settings:
   base:
@@ -24,6 +43,12 @@ targets:
       - Sources
     dependencies:
       - package: ComposableArchitecture
+      - package: Dependencies
+        product: Dependencies
+      - package: Dependencies
+        product: DependenciesMacros
+      - package: CasePaths
+      - package: IdentifiedCollections
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dsyang.PocketArtifacts
@@ -43,6 +68,13 @@ targets:
     dependencies:
       - target: PocketArtifacts
       - package: ComposableArchitecture
+      - package: Dependencies
+        product: Dependencies
+      - package: Dependencies
+        product: DependenciesMacros
+      - package: CasePaths
+      - package: IdentifiedCollections
+      - package: ConcurrencyExtras
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
