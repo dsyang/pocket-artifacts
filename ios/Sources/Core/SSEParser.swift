@@ -30,10 +30,13 @@ struct SSEParser {
 
   /// Feeds a raw chunk of the response body; returns the payloads of all
   /// `data:` lines completed by this chunk.
+  ///
+  /// Note: "\r\n" is a single Character in Swift, so a plain search for
+  /// "\n" would never match CRLF-terminated lines.
   mutating func feed(_ chunk: String) -> [String] {
     buffer += chunk
     var payloads: [String] = []
-    while let newlineIndex = buffer.firstIndex(of: "\n") {
+    while let newlineIndex = buffer.firstIndex(where: { $0 == "\n" || $0 == "\r\n" }) {
       let line = String(buffer[buffer.startIndex..<newlineIndex])
       buffer = String(buffer[buffer.index(after: newlineIndex)...])
       if let payload = Self.parse(line: line) {
