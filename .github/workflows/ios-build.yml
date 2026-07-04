@@ -1,0 +1,49 @@
+# Primary in-session verification loop: push → this compiles and tests →
+# fix errors. Runner and Xcode are pinned deliberately — CI is our only
+# compiler, so a floating alias flipping to a new image (new Xcode/SDK/
+# simulator set) would break builds with no repo change to explain it.
+# Bump runner/Xcode as isolated commits when deprecation warnings appear.
+name: iOS Build & Test
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pin Xcode
+        run: |
+          ls /Applications | grep -i xcode || true
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Install tools
+        run: brew install xcodegen xcbeautify
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+        working-directory: ios
+
+      - name: Build and test (iPhone simulator)
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project ios/PocketArtifacts.xcodeproj \
+            -scheme PocketArtifacts \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -skipMacroValidation \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | xcbeautify --renderer github-actions
