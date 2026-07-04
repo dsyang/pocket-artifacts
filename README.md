@@ -20,9 +20,9 @@ There is no Xcode in the development environment — the project is plain text:
 
 - `ios/project.yml` is the [XcodeGen](https://github.com/yonaskolb/XcodeGen)
   spec; the `.xcodeproj` is generated and gitignored.
-- CI (`.github/workflows/ios-build.yml`, pinned `macos-15` + Xcode 16.4) runs
-  `xcodegen generate` then `xcodebuild test` against the iPhone 16 simulator.
-  That's the compile/test loop.
+- CI (`.github/workflows/ios-build.yml`, pinned `macos-26` runner, newest
+  Xcode 26.x on the image) runs `xcodegen generate` then `xcodebuild test`
+  against the iPhone 17 simulator. That's the compile/test loop.
 
 To work on it locally with Xcode:
 
