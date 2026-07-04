@@ -1,0 +1,60 @@
+# Primary in-session verification loop: push → this compiles and tests →
+# fix errors. The runner is pinned deliberately — CI is our only compiler,
+# so a floating alias flipping to a new image (new Xcode/SDK/simulator set)
+# would break builds with no repo change to explain it. Within the image we
+# select the newest Xcode 26.x present (and print it), so minor image
+# updates don't require a repo change. Runner bumps happen as isolated
+# commits when deprecation warnings appear.
+name: iOS Build & Test
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode 26
+        run: |
+          ls -d /Applications/Xcode*.app
+          XCODE_APP="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          echo "Selected: $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install tools
+        run: brew install xcodegen xcbeautify
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+        working-directory: ios
+
+      - name: List available simulators
+        run: xcrun simctl list devices available | head -40
+
+      # ENABLE_DEBUG_DYLIB=NO: the SwiftUI-previews debug dylib fails to
+      # link against SPM package-product frameworks in CI (undefined
+      # symbols from transitive products); previews aren't used here.
+      - name: Build and test (iPhone simulator)
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project ios/PocketArtifacts.xcodeproj \
+            -scheme PocketArtifacts \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            -skipMacroValidation \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_DEBUG_DYLIB=NO \
+            2>&1 | xcbeautify --renderer github-actions
