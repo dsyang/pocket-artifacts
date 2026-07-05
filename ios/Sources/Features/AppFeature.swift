@@ -6,7 +6,7 @@ import SwiftUI
 /// first run (no API key yet) or when the editor reports a missing key.
 @Reducer
 struct AppFeature {
-  @Reducer(state: .equatable)
+  @Reducer
   enum Path {
     case editor(EditorFeature)
   }
@@ -73,6 +73,8 @@ struct AppFeature {
     }
   }
 }
+
+extension AppFeature.Path.State: Equatable {}
 
 struct AppView: View {
   @Bindable var store: StoreOf<AppFeature>

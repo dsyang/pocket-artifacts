@@ -75,9 +75,9 @@ struct EditorFeature {
       case .task:
         state.model = modelPreference.selectedModel() ?? OpenRouterClient.defaultModel
         return .run { [artifactID = state.artifact.id] send in
-          async let messages = database.fetchMessages(artifactID: artifactID)
-          async let versions = database.fetchVersions(artifactID: artifactID)
-          try await send(.loaded(messages: messages, versions: versions))
+          let messages = try await database.fetchMessages(artifactID: artifactID)
+          let versions = try await database.fetchVersions(artifactID: artifactID)
+          await send(.loaded(messages: messages, versions: versions))
         } catch: { error, send in
           await send(.loadFailed(error.localizedDescription))
         }

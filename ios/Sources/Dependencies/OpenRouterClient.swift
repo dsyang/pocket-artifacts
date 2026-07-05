@@ -13,7 +13,9 @@ struct OpenRouterClient: Sendable {
   var streamChat: @Sendable (ChatRequest) async throws -> AsyncThrowingStream<String, Error>
   /// Fetches the available models for the Settings picker, sorted by name.
   /// The key is optional — OpenRouter serves the list unauthenticated too.
-  var listModels: @Sendable (_ apiKey: String?) async throws -> [OpenRouterModel]
+  /// Pass a category (e.g. "programming") to get OpenRouter's curated
+  /// subset for that use case instead of the full ~340-model catalog.
+  var listModels: @Sendable (_ apiKey: String?, _ category: String?) async throws -> [OpenRouterModel]
 }
 
 enum OpenRouterError: Error, LocalizedError, Equatable {
@@ -32,8 +34,11 @@ enum OpenRouterError: Error, LocalizedError, Equatable {
 }
 
 extension OpenRouterClient: DependencyKey {
-  static let defaultModel = "anthropic/claude-sonnet-4.5"
+  static let defaultModel = "anthropic/claude-sonnet-4.6"
   static let defaultBaseURL = URL(string: "https://openrouter.ai")!
+  /// The category the model picker filters by unless "Show all" is on:
+  /// building artifacts is a programming task.
+  static let programmingCategory = "programming"
 
   static let liveValue = OpenRouterClient.live(baseURL: defaultBaseURL)
 
@@ -95,8 +100,15 @@ extension OpenRouterClient: DependencyKey {
           }
         }
       },
-      listModels: { apiKey in
-        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/v1/models"))
+      listModels: { apiKey, category in
+        var url = baseURL.appendingPathComponent("api/v1/models")
+        if let category,
+          var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        {
+          components.queryItems = [URLQueryItem(name: "category", value: category)]
+          url = components.url ?? url
+        }
+        var urlRequest = URLRequest(url: url)
         if let apiKey {
           urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
