@@ -1,10 +1,6 @@
 # Pocket Artifacts
 
-A native iOS app for building **artifacts** — self-contained single-page HTML
-apps in the style of Claude Artifacts — entirely from your phone. Inspired by
-Simon Willison's [HTML tools](https://simonwillison.net/2025/Dec/10/html-tools/)
-workflow: single-file HTML+JS+CSS, no build step, CDN dependencies,
-localStorage state.
+A native iOS app for building and refining HTML artifacts entirely on your phone, inspired by [Claude Artifacts](https://claude.ai) and Simon Willison's [HTML tools](https://simonwillison.net/2025/Dec/10/html-tools/) workflow. Single-file HTML+JS+CSS, no build step, CDN dependencies, localStorage state.
 
 - **BYOK**: talks to AI models through [OpenRouter](https://openrouter.ai)
   with your own API key (stored in the iOS Keychain).
@@ -13,6 +9,15 @@ localStorage state.
 - **Previewed in-app**: WKWebView, mobile-first, gestures belong to the artifact.
 - **Yours to keep**: Copy HTML puts the full source on the clipboard — paste
   it into the GitHub app, host it on GitHub Pages, or share the `.html` file.
+
+## Quick Start
+
+To work on it locally with Xcode:
+
+```sh
+brew install xcodegen
+cd ios && xcodegen generate && open PocketArtifacts.xcodeproj
+```
 
 ## Development
 
@@ -30,13 +35,6 @@ There is no Xcode in the development environment — the project is plain text:
   `IOS_ADHOC_PROFILE_BASE64`, `APPLE_TEAM_ID`, `FIREBASE_APP_ID`,
   `FIREBASE_SERVICE_ACCOUNT_JSON`. Signing settings reach only the app
   target via `ios/Signing.xcconfig` (empty in the repo, written in CI).
-
-To work on it locally with Xcode:
-
-```sh
-brew install xcodegen
-cd ios && xcodegen generate && open PocketArtifacts.xcodeproj
-```
 
 ## Architecture
 
