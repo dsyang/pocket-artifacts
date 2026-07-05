@@ -8,7 +8,7 @@ final class SettingsFeatureTests: XCTestCase {
   static let curated = [
     OpenRouterModel(id: "anthropic/claude-sonnet-4.6", name: "Anthropic: Claude Sonnet 4.6")
   ]
-  static let all = Self.curated + [
+  static let all = curated + [
     OpenRouterModel(id: "tiny/chat-model", name: "Tiny: Chat Model")
   ]
 
