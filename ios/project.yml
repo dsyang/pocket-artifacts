@@ -75,6 +75,10 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         CURRENT_PROJECT_VERSION: "1"
         MARKETING_VERSION: "1.0"
+        # AppIcon lives in Sources/Assets.xcassets. We use a custom
+        # Info.plist (not GENERATE_INFOPLIST_FILE), so name the icon set
+        # explicitly — Xcode won't infer it otherwise.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     scheme:
       testTargets:
         - PocketArtifactsTests
