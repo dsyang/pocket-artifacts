@@ -1,19 +1,15 @@
-# Phase 1.5: signed ad-hoc build → Firebase App Distribution (retrigger).
-# Installing = tapping the link in the Firebase App Tester invite — no
-# Apple review or processing queue. Signing assets come from repo secrets
-# (see README): ad-hoc cert .p12 + password, provisioning profile,
-# Apple team ID, Firebase app ID + service account.
+# Signed ad-hoc build → Firebase App Distribution. Installing = tapping
+# the link in the Firebase App Tester invite — no Apple review or
+# processing queue. Signing assets come from repo secrets (see README):
+# ad-hoc cert .p12 + password, provisioning profile, Apple team ID,
+# Firebase app ID + service account.
 name: iOS Distribute (Firebase)
 
 on:
   workflow_dispatch:
-  # Temporary trigger while proving the pipeline from the working branch;
-  # flips to `push: branches: [main]` once a build installs on-device.
   push:
     branches:
-      - "claude/**"
-    paths:
-      - ".github/workflows/ios-distribute.yml"
+      - main
 
 concurrency:
   group: ios-distribute-${{ github.ref }}

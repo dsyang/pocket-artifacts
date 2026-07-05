@@ -23,6 +23,13 @@ There is no Xcode in the development environment — the project is plain text:
 - CI (`.github/workflows/ios-build.yml`, pinned `macos-26` runner, newest
   Xcode 26.x on the image) runs `xcodegen generate` then `xcodebuild test`
   against the iPhone 17 simulator. That's the compile/test loop.
+- Device builds (`.github/workflows/ios-distribute.yml`, on push to `main`
+  or manual dispatch) produce a manually-signed ad-hoc IPA and upload it to
+  Firebase App Distribution's `testers` group. Signing/config comes from
+  repo secrets: `IOS_DIST_CERT_P12_BASE64`, `IOS_DIST_CERT_P12_PASSWORD`,
+  `IOS_ADHOC_PROFILE_BASE64`, `APPLE_TEAM_ID`, `FIREBASE_APP_ID`,
+  `FIREBASE_SERVICE_ACCOUNT_JSON`. Signing settings reach only the app
+  target via `ios/Signing.xcconfig` (empty in the repo, written in CI).
 
 To work on it locally with Xcode:
 
