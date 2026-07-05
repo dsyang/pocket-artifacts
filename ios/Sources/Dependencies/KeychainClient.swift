@@ -13,7 +13,7 @@ struct KeychainClient: Sendable {
 }
 
 extension KeychainClient: DependencyKey {
-  private static let service = "com.dsyang.PocketArtifacts"
+  private static let service = "fyi.imdaniel.pocketartifacts"
   private static let account = "openrouter-api-key"
 
   private static var baseQuery: [String: Any] {

@@ -1,0 +1,4 @@
+// Intentionally empty: simulator/CI test builds need no signing.
+// ios-distribute.yml overwrites this file at build time with manual
+// code-signing settings (team, identity, provisioning profile) so they
+// apply to the app target only — never to SPM package targets.
