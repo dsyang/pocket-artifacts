@@ -1,4 +1,4 @@
-# Phase 1.5: signed ad-hoc build → Firebase App Distribution.
+# Phase 1.5: signed ad-hoc build → Firebase App Distribution (retrigger).
 # Installing = tapping the link in the Firebase App Tester invite — no
 # Apple review or processing queue. Signing assets come from repo secrets
 # (see README): ad-hoc cert .p12 + password, provisioning profile,
