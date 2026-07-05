@@ -5,86 +5,52 @@ import XCTest
 
 @MainActor
 final class SettingsFeatureTests: XCTestCase {
-  static let curated = [
-    OpenRouterModel(id: "anthropic/claude-sonnet-4.6", name: "Anthropic: Claude Sonnet 4.6")
-  ]
-  static let all = curated + [
-    OpenRouterModel(id: "tiny/chat-model", name: "Tiny: Chat Model")
-  ]
-
-  func testPickerLoadsCuratedProgrammingModelsByDefault() async {
-    let requestedCategory = LockIsolated<String?>("unset")
-
+  func testOnAppearReflectsExistingKey() async {
     let store = TestStore(initialState: SettingsFeature.State()) {
       SettingsFeature()
     } withDependencies: {
-      $0.keychainClient.apiKey = { "sk-or-test" }
-      $0.openRouterClient.listModels = { _, category in
-        requestedCategory.setValue(category)
-        return Self.curated
-      }
+      $0.keychainClient.apiKey = { "sk-or-existing" }
     }
 
-    await store.send(.modelListAppeared) {
-      $0.isLoadingModels = true
+    await store.send(.onAppear) {
+      $0.hasExistingKey = true
     }
-    await store.receive(.modelsLoaded(Self.curated)) {
-      $0.isLoadingModels = false
-      $0.models = Self.curated
-    }
-    XCTAssertEqual(requestedCategory.value, OpenRouterClient.programmingCategory)
   }
 
-  func testShowAllModelsToggleRefetchesWithoutCategory() async {
-    let requestedCategory = LockIsolated<String?>("unset")
+  func testSaveStoresKeyAndDismisses() async {
+    let saved = LockIsolated<String?>(nil)
 
     let store = TestStore(
-      initialState: SettingsFeature.State(models: Self.curated)
+      initialState: SettingsFeature.State(apiKeyInput: "  sk-or-new  ")
     ) {
       SettingsFeature()
     } withDependencies: {
-      $0.keychainClient.apiKey = { "sk-or-test" }
-      $0.openRouterClient.listModels = { _, category in
-        requestedCategory.setValue(category)
-        return Self.all
-      }
+      $0.keychainClient.setAPIKey = { saved.setValue($0) }
+      $0.dismiss = DismissEffect {}
     }
 
-    await store.send(.binding(.set(\.showAllModels, true))) {
-      $0.showAllModels = true
-      $0.models = []
-      $0.isLoadingModels = true
+    await store.send(.saveTapped) {
+      // Trimmed, stored, and the input cleared.
+      $0.apiKeyInput = ""
+      $0.hasExistingKey = true
     }
-    await store.receive(.modelsLoaded(Self.all)) {
-      $0.isLoadingModels = false
-      $0.models = Self.all
-    }
-    XCTAssertNil(requestedCategory.value)
+    XCTAssertEqual(saved.value, "sk-or-new")
   }
 
-  func testSelectedModelStaysVisibleWhenNotInFetchedList() {
-    let state = SettingsFeature.State(
-      selectedModel: "anthropic/claude-sonnet-4.5",
-      models: Self.curated
-    )
-    XCTAssertEqual(
-      state.filteredModels.map(\.id),
-      ["anthropic/claude-sonnet-4.5", "anthropic/claude-sonnet-4.6"]
-    )
-  }
+  func testRemoveKeyClearsExistingFlag() async {
+    let deleted = LockIsolated(false)
 
-  func testModelSelectionPersistsPreference() async {
-    let saved = LockIsolated<String?>(nil)
-
-    let store = TestStore(initialState: SettingsFeature.State()) {
+    let store = TestStore(
+      initialState: SettingsFeature.State(hasExistingKey: true)
+    ) {
       SettingsFeature()
     } withDependencies: {
-      $0.modelPreference.setSelectedModel = { saved.setValue($0) }
+      $0.keychainClient.deleteAPIKey = { deleted.setValue(true) }
     }
 
-    await store.send(.modelSelected("openai/gpt-5.5")) {
-      $0.selectedModel = "openai/gpt-5.5"
+    await store.send(.removeKeyTapped) {
+      $0.hasExistingKey = false
     }
-    XCTAssertEqual(saved.value, "openai/gpt-5.5")
+    XCTAssertTrue(deleted.value)
   }
 }

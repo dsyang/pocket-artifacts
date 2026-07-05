@@ -69,6 +69,11 @@ struct EditorView: View {
     ) { historyStore in
       VersionHistoryView(store: historyStore)
     }
+    .sheet(
+      item: $store.scope(state: \.modelPicker, action: \.modelPicker)
+    ) { modelStore in
+      ModelPickerView(store: modelStore)
+    }
   }
 
   private func emptyState(

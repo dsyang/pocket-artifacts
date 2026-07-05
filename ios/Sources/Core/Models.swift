@@ -5,6 +5,12 @@ import Foundation
 struct Artifact: Identifiable, Equatable, Sendable, Codable {
   let id: UUID
   var title: String
+  /// The OpenRouter model this chat generates with. Model choice is
+  /// per-artifact (per-chat), not a single app-wide preference — different
+  /// artifacts can be built with different models. New artifacts start on
+  /// `OpenRouterClient.defaultModel`; older rows are backfilled with it by
+  /// the database migration that added this column.
+  var model: String = OpenRouterClient.defaultModel
   var createdAt: Date
   var updatedAt: Date
 }

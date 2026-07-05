@@ -19,8 +19,8 @@ struct EditorFeature {
     var streamingMessageID: UUID?
     var tab = Tab.chat
     var errorMessage: String?
-    var model = OpenRouterClient.defaultModel
     @Presents var versionHistory: VersionHistoryFeature.State?
+    @Presents var modelPicker: ModelPickerFeature.State?
 
     /// The current artifact HTML, shown in Preview and Code tabs.
     var currentHTML: String? { versions.last?.html }
@@ -45,7 +45,9 @@ struct EditorFeature {
     case streamFailed(String)
     case saveFailed(String)
     case historyButtonTapped
+    case modelButtonTapped
     case versionHistory(PresentationAction<VersionHistoryFeature.Action>)
+    case modelPicker(PresentationAction<ModelPickerFeature.Action>)
     case delegate(Delegate)
 
     enum Delegate: Equatable {
@@ -56,7 +58,6 @@ struct EditorFeature {
   @Dependency(\.openRouterClient) var openRouter
   @Dependency(\.keychainClient) var keychain
   @Dependency(\.databaseClient) var database
-  @Dependency(\.modelPreference) var modelPreference
   @Dependency(\.uuid) var uuid
   @Dependency(\.date) var date
 
@@ -72,7 +73,6 @@ struct EditorFeature {
         return .none
 
       case .task:
-        state.model = modelPreference.selectedModel() ?? OpenRouterClient.defaultModel
         return .run { [artifactID = state.artifact.id] send in
           let messages = try await database.fetchMessages(artifactID: artifactID)
           let versions = try await database.fetchVersions(artifactID: artifactID)
@@ -97,7 +97,6 @@ struct EditorFeature {
           return .send(.delegate(.apiKeyRequired))
         }
 
-        state.model = modelPreference.selectedModel() ?? OpenRouterClient.defaultModel
         state.inputText = ""
         state.errorMessage = nil
         let userMessage = ChatMessage(id: uuid(), role: .user, content: prompt)
@@ -105,7 +104,7 @@ struct EditorFeature {
         state.artifact.updatedAt = date()
 
         let request = ChatRequest(
-          model: state.model,
+          model: state.artifact.model,
           messages: ChatContext.build(messages: Array(state.messages)),
           apiKey: apiKey
         )
@@ -190,6 +189,22 @@ struct EditorFeature {
         )
         return .none
 
+      case .modelButtonTapped:
+        state.modelPicker = ModelPickerFeature.State(selectedModel: state.artifact.model)
+        return .none
+
+      case .modelPicker(.presented(.delegate(.modelSelected(let id)))):
+        // Model choice is per-chat: store it on the artifact and persist.
+        // The library's ordering keys off updatedAt, so picking a model
+        // deliberately doesn't touch it.
+        state.artifact.model = id
+        return persist { [artifact = state.artifact] database in
+          try await database.updateArtifact(artifact)
+        }
+
+      case .modelPicker:
+        return .none
+
       case .versionHistory(.presented(.delegate(.restore(let version)))):
         state.versionHistory = nil
         let restored = ArtifactVersion(
@@ -220,6 +235,9 @@ struct EditorFeature {
     }
     .ifLet(\.$versionHistory, action: \.versionHistory) {
       VersionHistoryFeature()
+    }
+    .ifLet(\.$modelPicker, action: \.modelPicker) {
+      ModelPickerFeature()
     }
   }
 

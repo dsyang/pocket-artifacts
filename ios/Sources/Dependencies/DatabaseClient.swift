@@ -163,6 +163,14 @@ extension DatabaseClient: DependencyKey {
         t.column("isFailed", .boolean).notNull().defaults(to: false)
       }
     }
+    // Model choice moved from a single app-wide preference to a per-artifact
+    // field. Existing artifacts predate the column, so backfill them with the
+    // default model rather than leaving it null.
+    migrator.registerMigration("v2-per-artifact-model") { db in
+      try db.alter(table: "artifact") { t in
+        t.add(column: "model", .text).notNull().defaults(to: OpenRouterClient.defaultModel)
+      }
+    }
     return migrator
   }
 }
