@@ -30,7 +30,6 @@ struct EditorFeature {
     enum Tab: String, Equatable, CaseIterable {
       case chat = "Chat"
       case preview = "Preview"
-      case code = "Code"
     }
   }
 

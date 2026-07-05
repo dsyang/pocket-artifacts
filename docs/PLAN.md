@@ -69,6 +69,11 @@
 >   configurable transport-chunk boundaries/delays (TCP coalescing on
 >   loopback makes those unreliable to script anyway); chunk-boundary
 >   reassembly is covered by the `SSEParser.feed` unit tests.
+> - **No Code tab** (user decision, supersedes §6's "Code view + Copy
+>   button"): the editor has only Chat and Preview tabs, and Copy HTML is a
+>   context menu on a long-press of the tab control. The copy affordance
+>   deliberately does not live inside the preview — gestures in the
+>   WKWebView belong to the artifact (§3).
 >
 > The original plan follows, unedited except for §Verification, where a
 > stale session-branch name and the superseded runner/Xcode pin were

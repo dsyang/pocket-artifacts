@@ -1,9 +1,10 @@
 import ComposableArchitecture
 import SwiftUI
 
-/// Full-screen editor: segmented Chat / Preview / Code tabs. The preview is
+/// Full-screen editor: segmented Chat / Preview tabs. The preview is
 /// deliberately a full-screen tab (never a drag-dismissable sheet) so every
-/// swipe belongs to the artifact, not to sheet dismissal.
+/// swipe belongs to the artifact, not to sheet dismissal. Long-pressing the
+/// tab control offers Copy HTML — the way to get the source out of the app.
 struct EditorView: View {
   @Bindable var store: StoreOf<EditorFeature>
 
@@ -17,6 +18,18 @@ struct EditorView: View {
       .pickerStyle(.segmented)
       .padding(.horizontal)
       .padding(.vertical, 8)
+      // The Copy affordance lives on the tab control (long-press), not
+      // inside the preview: gestures inside the WKWebView belong to the
+      // artifact, and there is no Code tab to host a button.
+      .contextMenu {
+        if let html = store.currentHTML {
+          Button {
+            UIPasteboard.general.string = html
+          } label: {
+            Label("Copy HTML", systemImage: "doc.on.doc")
+          }
+        }
+      }
 
       switch store.tab {
       case .chat:
@@ -31,17 +44,6 @@ struct EditorView: View {
             "No artifact yet",
             systemImage: "sparkles",
             description: "Describe the app you want in the Chat tab."
-          )
-        }
-
-      case .code:
-        if let html = store.currentHTML {
-          CodeView(html: html)
-        } else {
-          emptyState(
-            "No HTML yet",
-            systemImage: "chevron.left.forwardslash.chevron.right",
-            description: "Generated source will appear here."
           )
         }
       }
