@@ -40,6 +40,30 @@ final class HTMLExtractorTests: XCTestCase {
     XCTAssertNil(HTMLExtractor.extract(from: "```html\n\n```"))
   }
 
+  // MARK: - title
+
+  func testExtractsTitle() {
+    let html = "<html><head><title>Tip Calculator</title></head><body></body></html>"
+    XCTAssertEqual(HTMLExtractor.title(from: html), "Tip Calculator")
+  }
+
+  func testExtractsTitleCaseInsensitiveWithAttributesAndWhitespace() {
+    let html = "<html><head><TITLE lang=\"en\">\n  Timer \n</TITLE></head></html>"
+    XCTAssertEqual(HTMLExtractor.title(from: html), "Timer")
+  }
+
+  func testTitleNilWhenMissing() {
+    XCTAssertNil(HTMLExtractor.title(from: "<html><body><h1>Hi</h1></body></html>"))
+  }
+
+  func testTitleNilWhenEmpty() {
+    XCTAssertNil(HTMLExtractor.title(from: "<html><head><title>  </title></head></html>"))
+  }
+
+  func testTitleNilForUnclosedTag() {
+    XCTAssertNil(HTMLExtractor.title(from: "<html><head><title>Oops</head></html>"))
+  }
+
   // MARK: - replacingHTMLFence
 
   func testReplacesFenceKeepingProse() {

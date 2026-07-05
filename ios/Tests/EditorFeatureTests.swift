@@ -5,18 +5,58 @@ import XCTest
 
 @MainActor
 final class EditorFeatureTests: XCTestCase {
-  static let html = "<!DOCTYPE html>\n<html><body><h1>Tip Calculator</h1></body></html>"
+  static let html =
+    "<!DOCTYPE html>\n<html><head><title>Tip Calculator</title></head><body><h1>Tips</h1></body></html>"
+  static let now = Date(timeIntervalSince1970: 1_234_567_890)
+  static let artifact = Artifact(
+    id: UUID(100), title: "Untitled", createdAt: now, updatedAt: now
+  )
 
-  func testHappyPathTurnCreatesVersionAndSwitchesToPreview() async {
+  func testTaskLoadsPersistedTranscriptAndVersions() async {
+    let messages = [
+      ChatMessage(id: UUID(10), role: .user, content: "make a tip calculator"),
+      ChatMessage(id: UUID(11), role: .assistant, content: "```html\n\(Self.html)\n```"),
+    ]
+    let versions = [
+      ArtifactVersion(
+        id: UUID(12), artifactID: Self.artifact.id, number: 1, html: Self.html,
+        createdAt: Self.now
+      )
+    ]
+
+    let store = TestStore(initialState: EditorFeature.State(artifact: Self.artifact)) {
+      EditorFeature()
+    } withDependencies: {
+      $0.databaseClient.fetchMessages = { _ in messages }
+      $0.databaseClient.fetchVersions = { _ in versions }
+    }
+
+    await store.send(.task)
+    await store.receive(.loaded(messages: messages, versions: versions)) {
+      $0.messages = IdentifiedArray(uniqueElements: messages)
+      $0.versions = IdentifiedArray(uniqueElements: versions)
+    }
+    XCTAssertEqual(store.state.currentHTML, Self.html)
+    XCTAssertEqual(store.state.htmlVersion, 1)
+  }
+
+  func testHappyPathTurnCreatesVersionDerivesTitleAndSwitchesToPreview() async {
     let delta1 = "Here's your app!\n"
     let delta2 = "```html\n\(Self.html)\n```\nEnjoy!"
 
+    let savedMessages = LockIsolated<[ChatMessage]>([])
+    let savedVersions = LockIsolated<[ArtifactVersion]>([])
+    let updatedArtifacts = LockIsolated<[Artifact]>([])
+
     let store = TestStore(
-      initialState: EditorFeature.State(inputText: "make a tip calculator")
+      initialState: EditorFeature.State(
+        artifact: Self.artifact, inputText: "make a tip calculator"
+      )
     ) {
       EditorFeature()
     } withDependencies: {
       $0.uuid = .incrementing
+      $0.date = .constant(Self.now)
       $0.keychainClient.apiKey = { "sk-or-test" }
       $0.openRouterClient.streamChat = { _ in
         AsyncThrowingStream { continuation in
@@ -24,6 +64,15 @@ final class EditorFeatureTests: XCTestCase {
           continuation.yield(delta2)
           continuation.finish()
         }
+      }
+      $0.databaseClient.saveMessage = { message, _ in
+        savedMessages.withValue { $0.append(message) }
+      }
+      $0.databaseClient.createVersion = { version in
+        savedVersions.withValue { $0.append(version) }
+      }
+      $0.databaseClient.updateArtifact = { artifact in
+        updatedArtifacts.withValue { $0.append(artifact) }
       }
     }
 
@@ -35,6 +84,7 @@ final class EditorFeatureTests: XCTestCase {
       ]
       $0.streamingMessageID = UUID(1)
       $0.isStreaming = true
+      $0.artifact.updatedAt = Self.now
     }
     await store.receive(.streamDelta(delta1)) {
       $0.messages[id: UUID(1)]?.content = delta1
@@ -45,21 +95,72 @@ final class EditorFeatureTests: XCTestCase {
     await store.receive(.streamFinished) {
       $0.isStreaming = false
       $0.streamingMessageID = nil
-      $0.currentHTML = Self.html
-      $0.htmlVersion = 1
+      $0.versions = [
+        ArtifactVersion(
+          id: UUID(2), artifactID: Self.artifact.id, number: 1, html: Self.html,
+          createdAt: Self.now
+        )
+      ]
+      $0.artifact.title = "Tip Calculator"
       $0.tab = .preview
     }
+    XCTAssertEqual(store.state.currentHTML, Self.html)
+
+    // Both the user turn and the finished assistant turn were persisted,
+    // along with the version and the retitled artifact.
+    XCTAssertEqual(savedMessages.value.map(\.role), [.user, .assistant])
+    XCTAssertEqual(savedVersions.value.map(\.number), [1])
+    XCTAssertEqual(savedVersions.value.first?.html, Self.html)
+    XCTAssertEqual(updatedArtifacts.value.last?.title, "Tip Calculator")
+  }
+
+  func testSecondTurnIncrementsVersionNumber() async {
+    let existing = ArtifactVersion(
+      id: UUID(50), artifactID: Self.artifact.id, number: 3, html: "<p>old</p>",
+      createdAt: Self.now
+    )
+    let reply = "```html\n\(Self.html)\n```"
+
+    let store = TestStore(
+      initialState: EditorFeature.State(
+        artifact: Self.artifact,
+        versions: [existing],
+        inputText: "make the buttons bigger"
+      )
+    ) {
+      EditorFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.date = .constant(Self.now)
+      $0.keychainClient.apiKey = { "sk-or-test" }
+      $0.openRouterClient.streamChat = { _ in
+        AsyncThrowingStream { continuation in
+          continuation.yield(reply)
+          continuation.finish()
+        }
+      }
+      $0.databaseClient.saveMessage = { _, _ in }
+      $0.databaseClient.createVersion = { _ in }
+      $0.databaseClient.updateArtifact = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.sendTapped)
+    await store.receive(\.streamFinished)
+    XCTAssertEqual(store.state.versions.last?.number, 4)
+    XCTAssertEqual(store.state.currentHTML, Self.html)
   }
 
   func testRequestIncludesSystemPromptAndUserMessage() async {
     let sentRequest = LockIsolated<ChatRequest?>(nil)
 
     let store = TestStore(
-      initialState: EditorFeature.State(inputText: "make a timer")
+      initialState: EditorFeature.State(artifact: Self.artifact, inputText: "make a timer")
     ) {
       EditorFeature()
     } withDependencies: {
       $0.uuid = .incrementing
+      $0.date = .constant(Self.now)
       $0.keychainClient.apiKey = { "sk-or-test" }
       $0.openRouterClient.streamChat = { request in
         sentRequest.setValue(request)
@@ -67,6 +168,8 @@ final class EditorFeatureTests: XCTestCase {
           continuation.finish()
         }
       }
+      $0.databaseClient.saveMessage = { _, _ in }
+      $0.databaseClient.updateArtifact = { _ in }
     }
 
     await store.send(.sendTapped) {
@@ -77,6 +180,7 @@ final class EditorFeatureTests: XCTestCase {
       ]
       $0.streamingMessageID = UUID(1)
       $0.isStreaming = true
+      $0.artifact.updatedAt = Self.now
     }
     await store.receive(.streamFinished) {
       // Nothing arrived, so the empty placeholder bubble is dropped.
@@ -99,15 +203,46 @@ final class EditorFeatureTests: XCTestCase {
     )
   }
 
-  func testNoFenceResponseIsPlainChatTurn() async {
-    let reply = "I can build small single-page apps. What would you like?"
+  func testSelectedModelPreferenceIsUsedForRequests() async {
+    let sentRequest = LockIsolated<ChatRequest?>(nil)
 
     let store = TestStore(
-      initialState: EditorFeature.State(inputText: "what can you do?")
+      initialState: EditorFeature.State(artifact: Self.artifact, inputText: "make a timer")
     ) {
       EditorFeature()
     } withDependencies: {
       $0.uuid = .incrementing
+      $0.date = .constant(Self.now)
+      $0.keychainClient.apiKey = { "sk-or-test" }
+      $0.modelPreference.selectedModel = { "openai/gpt-5" }
+      $0.openRouterClient.streamChat = { request in
+        sentRequest.setValue(request)
+        return AsyncThrowingStream { continuation in
+          continuation.finish()
+        }
+      }
+      $0.databaseClient.saveMessage = { _, _ in }
+      $0.databaseClient.updateArtifact = { _ in }
+    }
+    store.exhaustivity = .off
+
+    await store.send(.sendTapped)
+    await store.receive(\.streamFinished)
+    XCTAssertEqual(sentRequest.value?.model, "openai/gpt-5")
+    XCTAssertEqual(store.state.model, "openai/gpt-5")
+  }
+
+  func testNoFenceResponseIsPlainChatTurn() async {
+    let reply = "I can build small single-page apps. What would you like?"
+    let savedMessages = LockIsolated<[ChatMessage]>([])
+
+    let store = TestStore(
+      initialState: EditorFeature.State(artifact: Self.artifact, inputText: "what can you do?")
+    ) {
+      EditorFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.date = .constant(Self.now)
       $0.keychainClient.apiKey = { "sk-or-test" }
       $0.openRouterClient.streamChat = { _ in
         AsyncThrowingStream { continuation in
@@ -115,6 +250,10 @@ final class EditorFeatureTests: XCTestCase {
           continuation.finish()
         }
       }
+      $0.databaseClient.saveMessage = { message, _ in
+        savedMessages.withValue { $0.append(message) }
+      }
+      $0.databaseClient.updateArtifact = { _ in }
     }
 
     await store.send(.sendTapped) {
@@ -125,6 +264,7 @@ final class EditorFeatureTests: XCTestCase {
       ]
       $0.streamingMessageID = UUID(1)
       $0.isStreaming = true
+      $0.artifact.updatedAt = Self.now
     }
     await store.receive(.streamDelta(reply)) {
       $0.messages[id: UUID(1)]?.content = reply
@@ -136,17 +276,21 @@ final class EditorFeatureTests: XCTestCase {
     }
     XCTAssertNil(store.state.currentHTML)
     XCTAssertEqual(store.state.tab, .chat)
+    // The assistant reply is still persisted as part of the transcript.
+    XCTAssertEqual(savedMessages.value.map(\.content), ["what can you do?", reply])
   }
 
-  func testStreamFailureKeepsPartialTextMarkedFailed() async {
+  func testStreamFailureKeepsPartialTextMarkedFailedAndPersistsIt() async {
     struct StreamError: Error {}
+    let savedMessages = LockIsolated<[ChatMessage]>([])
 
     let store = TestStore(
-      initialState: EditorFeature.State(inputText: "make a game")
+      initialState: EditorFeature.State(artifact: Self.artifact, inputText: "make a game")
     ) {
       EditorFeature()
     } withDependencies: {
       $0.uuid = .incrementing
+      $0.date = .constant(Self.now)
       $0.keychainClient.apiKey = { "sk-or-test" }
       $0.openRouterClient.streamChat = { _ in
         AsyncThrowingStream { continuation in
@@ -154,6 +298,10 @@ final class EditorFeatureTests: XCTestCase {
           continuation.finish(throwing: StreamError())
         }
       }
+      $0.databaseClient.saveMessage = { message, _ in
+        savedMessages.withValue { $0.append(message) }
+      }
+      $0.databaseClient.updateArtifact = { _ in }
     }
 
     await store.send(.sendTapped) {
@@ -164,6 +312,7 @@ final class EditorFeatureTests: XCTestCase {
       ]
       $0.streamingMessageID = UUID(1)
       $0.isStreaming = true
+      $0.artifact.updatedAt = Self.now
     }
     await store.receive(.streamDelta("Let me start")) {
       $0.messages[id: UUID(1)]?.content = "Let me start"
@@ -175,15 +324,17 @@ final class EditorFeatureTests: XCTestCase {
       $0.messages[id: UUID(1)]?.isFailed = true
     }
     XCTAssertNil(store.state.currentHTML)
+    XCTAssertEqual(savedMessages.value.last?.isFailed, true)
   }
 
   func testCancelKeepsPartialTextAndStopsStream() async {
     let store = TestStore(
-      initialState: EditorFeature.State(inputText: "make a game")
+      initialState: EditorFeature.State(artifact: Self.artifact, inputText: "make a game")
     ) {
       EditorFeature()
     } withDependencies: {
       $0.uuid = .incrementing
+      $0.date = .constant(Self.now)
       $0.keychainClient.apiKey = { "sk-or-test" }
       $0.openRouterClient.streamChat = { _ in
         AsyncThrowingStream { continuation in
@@ -191,6 +342,8 @@ final class EditorFeatureTests: XCTestCase {
           // Never finishes — the user will cancel.
         }
       }
+      $0.databaseClient.saveMessage = { _, _ in }
+      $0.databaseClient.updateArtifact = { _ in }
     }
 
     await store.send(.sendTapped) {
@@ -201,6 +354,7 @@ final class EditorFeatureTests: XCTestCase {
       ]
       $0.streamingMessageID = UUID(1)
       $0.isStreaming = true
+      $0.artifact.updatedAt = Self.now
     }
     await store.receive(.streamDelta("Working on")) {
       $0.messages[id: UUID(1)]?.content = "Working on"
@@ -212,9 +366,54 @@ final class EditorFeatureTests: XCTestCase {
     }
   }
 
+  func testRestoreCopiesOldVersionForward() async {
+    let v1 = ArtifactVersion(
+      id: UUID(10), artifactID: Self.artifact.id, number: 1, html: "<p>one</p>",
+      createdAt: Self.now
+    )
+    let v2 = ArtifactVersion(
+      id: UUID(11), artifactID: Self.artifact.id, number: 2, html: "<p>two</p>",
+      createdAt: Self.now
+    )
+    let savedVersions = LockIsolated<[ArtifactVersion]>([])
+
+    let store = TestStore(
+      initialState: EditorFeature.State(artifact: Self.artifact, versions: [v1, v2])
+    ) {
+      EditorFeature()
+    } withDependencies: {
+      $0.uuid = .incrementing
+      $0.date = .constant(Self.now)
+      $0.databaseClient.createVersion = { version in
+        savedVersions.withValue { $0.append(version) }
+      }
+      $0.databaseClient.updateArtifact = { _ in }
+    }
+
+    await store.send(.historyButtonTapped) {
+      $0.versionHistory = VersionHistoryFeature.State(versions: [v2, v1])
+    }
+    await store.send(.versionHistory(.presented(.restoreTapped(v1))))
+    await store.receive(.versionHistory(.presented(.delegate(.restore(v1))))) {
+      $0.versionHistory = nil
+      $0.versions = [
+        v1, v2,
+        ArtifactVersion(
+          id: UUID(0), artifactID: Self.artifact.id, number: 3, html: v1.html,
+          createdAt: Self.now
+        ),
+      ]
+      $0.tab = .preview
+    }
+    // History is never rewritten — the restore is a new, higher version.
+    XCTAssertEqual(savedVersions.value.map(\.number), [3])
+    XCTAssertEqual(savedVersions.value.first?.html, v1.html)
+    XCTAssertEqual(store.state.htmlVersion, 3)
+  }
+
   func testMissingAPIKeyEmitsDelegateAndPreservesInput() async {
     let store = TestStore(
-      initialState: EditorFeature.State(inputText: "make a timer")
+      initialState: EditorFeature.State(artifact: Self.artifact, inputText: "make a timer")
     ) {
       EditorFeature()
     } withDependencies: {
@@ -228,7 +427,9 @@ final class EditorFeatureTests: XCTestCase {
   }
 
   func testEmptyInputDoesNothing() async {
-    let store = TestStore(initialState: EditorFeature.State(inputText: "   ")) {
+    let store = TestStore(
+      initialState: EditorFeature.State(artifact: Self.artifact, inputText: "   ")
+    ) {
       EditorFeature()
     }
     await store.send(.sendTapped)

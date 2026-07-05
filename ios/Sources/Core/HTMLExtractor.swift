@@ -27,6 +27,21 @@ enum HTMLExtractor {
     return html.isEmpty ? nil : html
   }
 
+  /// Pulls the text of the document's `<title>` tag, used to name the
+  /// artifact (the system prompt requires every artifact to have one).
+  static func title(from html: String) -> String? {
+    guard
+      let open = html.range(of: "<title", options: .caseInsensitive),
+      let openEnd = html.range(of: ">", range: open.upperBound..<html.endIndex),
+      let close = html.range(
+        of: "</title", options: .caseInsensitive, range: openEnd.upperBound..<html.endIndex
+      )
+    else { return nil }
+    let title = html[openEnd.upperBound..<close.lowerBound]
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return title.isEmpty ? nil : title
+  }
+
   /// Replaces the entire first ```html fenced block with a placeholder,
   /// keeping surrounding prose. Used to shrink older assistant turns when
   /// building model context. Returns the text unchanged if there is no fence.

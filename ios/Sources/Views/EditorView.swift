@@ -46,6 +46,27 @@ struct EditorView: View {
         }
       }
     }
+    .navigationTitle(store.artifact.title)
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        Button {
+          store.send(.historyButtonTapped)
+        } label: {
+          Image(systemName: "clock.arrow.circlepath")
+        }
+        .disabled(store.versions.isEmpty)
+        .accessibilityLabel("Version history")
+      }
+    }
+    .task {
+      store.send(.task)
+    }
+    .sheet(
+      item: $store.scope(state: \.versionHistory, action: \.versionHistory)
+    ) { historyStore in
+      VersionHistoryView(store: historyStore)
+    }
   }
 
   private func emptyState(

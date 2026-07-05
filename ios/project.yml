@@ -29,6 +29,16 @@ packages:
   ConcurrencyExtras:
     url: https://github.com/pointfreeco/swift-concurrency-extras
     from: "1.2.0"
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "7.0.0"
+  # Embedded HTTP server for the test-only MockServer (OpenRouter SSE
+  # stubs). FlyingSocks is declared too: Socket.Address (used to read the
+  # ephemeral port) lives there, and autolinking cannot resolve undeclared
+  # products (see note above).
+  FlyingFox:
+    url: https://github.com/swhitty/FlyingFox
+    from: "0.20.0"
 
 settings:
   base:
@@ -49,6 +59,7 @@ targets:
         product: DependenciesMacros
       - package: CasePaths
       - package: IdentifiedCollections
+      - package: GRDB
     # Signing.xcconfig is empty in the repo (simulator builds need no
     # signing); ios-distribute.yml overwrites it with manual signing
     # settings. An xcconfig scopes them to the app target only — passing
@@ -73,6 +84,7 @@ targets:
     platform: iOS
     sources:
       - Tests
+      - TestSupport
     dependencies:
       - target: PocketArtifacts
       - package: ComposableArchitecture
@@ -83,6 +95,11 @@ targets:
       - package: CasePaths
       - package: IdentifiedCollections
       - package: ConcurrencyExtras
+      - package: GRDB
+      - package: FlyingFox
+        product: FlyingFox
+      - package: FlyingFox
+        product: FlyingSocks
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
