@@ -3,13 +3,13 @@
 # processing queue. Signing assets come from repo secrets (see README):
 # ad-hoc cert .p12 + password, provisioning profile, Apple team ID,
 # Firebase app ID + service account.
+#
+# Manual-only: trigger from the Actions tab ("Run workflow") when you
+# want a build on your phone.
 name: iOS Distribute (Firebase)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 concurrency:
   group: ios-distribute-${{ github.ref }}

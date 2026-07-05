@@ -7,11 +7,16 @@
 # commits when deprecation warnings appear.
 name: iOS Build & Test
 
+# Path-filtered to iOS code (and this file) so docs-only pushes don't
+# burn a macOS runner.
 on:
   push:
     branches:
       - main
       - "claude/**"
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-build.yml"
   workflow_dispatch:
 
 concurrency:
