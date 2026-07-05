@@ -1,5 +1,26 @@
 import Foundation
 
+/// A saved artifact: one single-page HTML app, plus (via foreign keys) its
+/// chat transcript and version history.
+struct Artifact: Identifiable, Equatable, Sendable, Codable {
+  let id: UUID
+  var title: String
+  var createdAt: Date
+  var updatedAt: Date
+}
+
+/// One immutable snapshot of an artifact's HTML, created whenever a model
+/// response contains a fenced HTML file. Restore never rewrites history —
+/// it copies an old version forward as a new, higher-numbered one.
+struct ArtifactVersion: Identifiable, Equatable, Sendable, Codable {
+  let id: UUID
+  var artifactID: UUID
+  /// 1-based and monotonically increasing per artifact.
+  var number: Int
+  var html: String
+  var createdAt: Date
+}
+
 /// A single turn in the artifact-building conversation.
 struct ChatMessage: Identifiable, Equatable, Sendable, Codable {
   enum Role: String, Equatable, Sendable, Codable {
@@ -33,6 +54,28 @@ struct ChatCompletionRequestBody: Encodable {
   var model: String
   var messages: [OpenRouterMessage]
   var stream: Bool
+}
+
+/// One entry from GET /api/v1/models, for the Settings model picker.
+struct OpenRouterModel: Identifiable, Equatable, Sendable, Codable {
+  var id: String
+  var name: String
+
+  init(id: String, name: String) {
+    self.id = id
+    self.name = name
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.id = try container.decode(String.self, forKey: .id)
+    self.name = try container.decodeIfPresent(String.self, forKey: .name) ?? self.id
+  }
+}
+
+/// Decodable envelope of GET /api/v1/models.
+struct ModelsResponse: Decodable {
+  var data: [OpenRouterModel]
 }
 
 /// Decodable shape of one SSE `data:` payload from a streaming completion.

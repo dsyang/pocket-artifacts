@@ -1,13 +1,21 @@
 # Pocket Artifacts — a mobile AI app for building single-page HTML tools
 
-> **Status (July 2026):** Phases 1 and 1.5 are complete; Phase 2 is next.
+> **Status (July 2026):** Phases 1, 1.5, and 2 are complete; Phase 3 is next.
 >
 > - ✅ **Phase 1** — iOS skeleton: XcodeGen project, TCA editor loop
 >   (chat → SSE stream → HTML extraction → WKWebView preview), Keychain
 >   BYOK settings, unit + TestStore suites, simulator CI green.
 > - ✅ **Phase 1.5** — Firebase App Distribution: signed ad-hoc builds from
 >   CI, confirmed installing and launching on a physical iPhone.
-> - ⬜ Phase 2 — persistence, library, versions
+> - ✅ **Phase 2** — persistence, library, versions: GRDB `DatabaseClient`
+>   (artifacts/versions/messages, cascade delete), `LibraryFeature` at the
+>   root of a navigation stack, editor wired to storage (transcript loaded
+>   on appear, every finished turn persisted, a numbered `ArtifactVersion`
+>   per HTML-bearing response, title derived from the generated `<title>`),
+>   `VersionHistoryFeature` with full-screen previews and copy-forward
+>   restore, model picker fed by `/models`, FlyingFox `MockServer`
+>   TestSupport, and `GenerationFlowTests` integration suite (live client →
+>   localhost SSE → reducers → GRDB rows). Simulator CI green.
 > - ⬜ Phase 3 — editor polish
 > - ⬜ Phase 4 — Android port
 >
@@ -35,6 +43,37 @@
 >   `APPLE_TEAM_ID`, `FIREBASE_APP_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON`.
 >   Distribution triggers on push to `main` + manual dispatch and delivers
 >   to the App Distribution group with alias `testers`.
+>
+> **Phase 2 deviations:**
+>
+> - **Model picker is category-limited**: `GET /api/v1/models` unfiltered
+>   returns ~340 models, most useless here, so the picker defaults to
+>   OpenRouter's curated `?category=programming` list (~19 models) with a
+>   "Show all models" toggle for the full catalog; the current selection
+>   stays visible even when it's off-list. Default model bumped to
+>   `anthropic/claude-sonnet-4.6` — 4.5 had aged out of that category.
+> - **Integration tests drive a live `Store`, not `TestStore`**: TestStore's
+>   action-by-action bookkeeping timed out consuming effect-produced actions
+>   in CI (and its assertable state lags unconsumed actions). Integration
+>   asserts final state + persisted rows + recorded request payloads, which
+>   a live store with `send(...).finish()` plus DB polling fits better.
+>   TestStore remains the tool for the unit suites.
+> - **More explicit SPM products**: FlyingFox *and* FlyingSocks are declared
+>   on the test target (`Socket.Address` for reading the MockServer's
+>   ephemeral port lives in FlyingSocks) — same autolinking constraint as
+>   the TCA re-exports above.
+> - **ATS**: `NSAllowsLocalNetworking` added to Info.plist so the loopback
+>   MockServer works under App Transport Security in test runs.
+> - **MockServer streams whole SSE bodies**: scripted responses are emitted
+>   as one response body of real `data:` events rather than with
+>   configurable transport-chunk boundaries/delays (TCP coalescing on
+>   loopback makes those unreliable to script anyway); chunk-boundary
+>   reassembly is covered by the `SSEParser.feed` unit tests.
+> - **No Code tab** (user decision, supersedes §6's "Code view + Copy
+>   button"): the editor has only Chat and Preview tabs, and Copy HTML is a
+>   context menu on a long-press of the tab control. The copy affordance
+>   deliberately does not live inside the preview — gestures in the
+>   WKWebView belong to the artifact (§3).
 >
 > The original plan follows, unedited except for §Verification, where a
 > stale session-branch name and the superseded runner/Xcode pin were
