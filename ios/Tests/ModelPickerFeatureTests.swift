@@ -94,9 +94,10 @@ final class ModelPickerFeatureTests: XCTestCase {
     let state = ModelPickerFeature.State(
       selectedModel: "tiny/chat-model",
       models: Self.all,
-      modelFilter: "model"
+      modelFilter: "/"
     )
-    // Both ids contain "model"; the selected one is still first.
+    // Both ids are namespaced (contain "/"), so both survive the filter;
+    // the selected one is still pinned first.
     XCTAssertEqual(
       state.displayedModels.map(\.id),
       ["tiny/chat-model", "anthropic/claude-sonnet-4.6"]
