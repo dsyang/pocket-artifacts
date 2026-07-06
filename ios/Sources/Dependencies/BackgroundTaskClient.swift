@@ -20,18 +20,24 @@ struct BackgroundTaskClient: Sendable {
 extension BackgroundTaskClient: DependencyKey {
   static let liveValue = BackgroundTaskClient(
     begin: { name, onExpiration in
-      await MainActor.run {
+      // Cross the actor hop as a raw Int so we don't depend on
+      // UIBackgroundTaskIdentifier's Sendable conformance.
+      let raw = await MainActor.run { () -> Int in
         var id = UIBackgroundTaskIdentifier.invalid
         id = UIApplication.shared.beginBackgroundTask(withName: name) {
           onExpiration()
           UIApplication.shared.endBackgroundTask(id)
         }
-        return id
+        return id.rawValue
       }
+      return UIBackgroundTaskIdentifier(rawValue: raw)
     },
     end: { id in
       guard id != .invalid else { return }
-      await MainActor.run { UIApplication.shared.endBackgroundTask(id) }
+      let raw = id.rawValue
+      await MainActor.run {
+        UIApplication.shared.endBackgroundTask(UIBackgroundTaskIdentifier(rawValue: raw))
+      }
     }
   )
 

@@ -129,22 +129,26 @@ actor GenerationService {
     try? await database.saveMessage(message: turn.userMessage, artifactID: artifactID)
     try? await database.updateArtifact(turn.artifact)
 
+    let outcome: Outcome
     do {
       for try await delta in try await openRouter.streamChat(turn.request) {
         active[artifactID]?.content += delta
         broadcast(.delta(messageID: turn.assistantMessageID, text: delta), to: artifactID)
       }
-      // AsyncThrowingStream may end normally (return nil) when the task is
-      // cancelled rather than throwing CancellationError, so check the flag.
-      let cancelled = active[artifactID]?.cancelRequested ?? false
-      await finish(artifactID: artifactID, outcome: cancelled ? .cancelled : .finished)
+      // A cancel can end the stream cleanly (nil return, no throw), so the
+      // flag — not the exit path — decides the outcome.
+      outcome = (active[artifactID]?.cancelRequested ?? false) ? .cancelled : .finished
     } catch {
-      let cancelled = active[artifactID]?.cancelRequested ?? false
-      await finish(
-        artifactID: artifactID,
-        outcome: cancelled ? .cancelled : .failed(error.localizedDescription)
-      )
+      outcome =
+        (active[artifactID]?.cancelRequested ?? false)
+        ? .cancelled : .failed(error.localizedDescription)
     }
+
+    // Cancelling a turn cancels *this* task (to tear the socket down
+    // promptly), so run the completion — including its database writes — in a
+    // fresh, uncancelled task, otherwise a cancelled turn's partial text would
+    // fail to persist.
+    await Task { await self.finish(artifactID: artifactID, outcome: outcome) }.value
   }
 
   private func finish(artifactID: UUID, outcome: Outcome) async {

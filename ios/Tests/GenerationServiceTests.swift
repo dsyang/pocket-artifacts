@@ -235,7 +235,9 @@ final class GenerationServiceTests: XCTestCase {
     XCTAssertTrue(result.wasCancelled)
     XCTAssertEqual(result.message?.isFailed, true)
     XCTAssertEqual(result.message?.content, "Working on")
-    XCTAssertTrue(terminated.value, "the underlying stream was torn down")
+    // The underlying stream is torn down as part of cancellation (onTermination
+    // fires around the nil return); poll to avoid racing that teardown.
+    try await waitFor("underlying stream torn down") { terminated.value }
   }
 
   // MARK: - Re-attach
@@ -292,10 +294,15 @@ final class GenerationServiceTests: XCTestCase {
     // Each artifact routes to its own scripted HTML by request model tag.
     let htmlA = "<html><head><title>A</title></head><body>A</body></html>"
     let htmlB = "<html><head><title>B</title></head><body>B</body></html>"
-    var artifactAModel = artifactA
-    artifactAModel.model = "model-a"
-    var artifactBModel = artifactB
-    artifactBModel.model = "model-b"
+    // `let` copies (not mutated vars) so the async-let captures are Sendable.
+    let artifactAModel = Artifact(
+      id: artifactA.id, title: artifactA.title, model: "model-a",
+      createdAt: Self.now, updatedAt: Self.now
+    )
+    let artifactBModel = Artifact(
+      id: artifactB.id, title: artifactB.title, model: "model-b",
+      createdAt: Self.now, updatedAt: Self.now
+    )
 
     let service = makeService(database: database) { request in
       let html = request.model == "model-a" ? htmlA : htmlB
