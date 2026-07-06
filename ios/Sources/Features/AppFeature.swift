@@ -20,6 +20,7 @@ struct AppFeature {
 
   enum Action {
     case onAppear
+    case scenePhaseChanged(ScenePhase)
     case settingsButtonTapped
     case library(LibraryFeature.Action)
     case path(StackActionOf<Path>)
@@ -27,6 +28,7 @@ struct AppFeature {
   }
 
   @Dependency(\.keychainClient) var keychain
+  @Dependency(\.generationClient) var generation
 
   var body: some ReducerOf<Self> {
     Scope(state: \.library, action: \.library) {
@@ -39,6 +41,12 @@ struct AppFeature {
           state.settings = SettingsFeature.State()
         }
         return .none
+
+      case .scenePhaseChanged(let phase):
+        // Going to the background: checkpoint any in-flight generations so
+        // their partial text survives if iOS suspends us before they finish.
+        guard phase == .background else { return .none }
+        return .run { _ in await generation.checkpoint() }
 
       case .settingsButtonTapped:
         state.settings = SettingsFeature.State()
@@ -78,6 +86,7 @@ extension AppFeature.Path.State: Equatable {}
 
 struct AppView: View {
   @Bindable var store: StoreOf<AppFeature>
+  @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
     NavigationStack(path: $store.scope(state: \.path, action: \.path)) {
@@ -101,6 +110,9 @@ struct AppView: View {
     }
     .onAppear {
       store.send(.onAppear)
+    }
+    .onChange(of: scenePhase) { _, newPhase in
+      store.send(.scenePhaseChanged(newPhase))
     }
     .sheet(item: $store.scope(state: \.settings, action: \.settings)) { settingsStore in
       SettingsView(store: settingsStore)
