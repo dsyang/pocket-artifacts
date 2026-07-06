@@ -17,6 +17,7 @@ final class LibraryFeatureTests: XCTestCase {
       LibraryFeature()
     } withDependencies: {
       $0.databaseClient.fetchArtifacts = { artifacts }
+      $0.generationClient.activeArtifactIDs = { AsyncStream { $0.finish() } }
     }
 
     await store.send(.task) {
@@ -26,6 +27,35 @@ final class LibraryFeatureTests: XCTestCase {
       $0.isLoading = false
       $0.artifacts = IdentifiedArray(uniqueElements: artifacts)
     }
+  }
+
+  func testActiveGenerationsChangedStoresGeneratingIDs() async {
+    let store = TestStore(initialState: LibraryFeature.State()) {
+      LibraryFeature()
+    }
+
+    // Growing the set (a generation started) just records the IDs.
+    await store.send(.activeGenerationsChanged([UUID(7)])) {
+      $0.generatingArtifactIDs = [UUID(7)]
+    }
+  }
+
+  func testFinishedGenerationRefreshesTheList() async {
+    let artifact = Artifact(id: UUID(1), title: "Timer", createdAt: Self.now, updatedAt: Self.now)
+    let store = TestStore(
+      initialState: LibraryFeature.State(artifacts: [artifact], generatingArtifactIDs: [UUID(1)])
+    ) {
+      LibraryFeature()
+    } withDependencies: {
+      $0.databaseClient.fetchArtifacts = { [artifact] }
+    }
+
+    // An ID leaving the set means a turn finished — reload titles/ordering.
+    await store.send(.activeGenerationsChanged([])) {
+      $0.generatingArtifactIDs = []
+    }
+    await store.receive(.refresh)
+    await store.receive(.artifactsLoaded([artifact]))
   }
 
   func testCreatePersistsAndOpensEditor() async {

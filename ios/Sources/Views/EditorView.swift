@@ -57,7 +57,10 @@ struct EditorView: View {
         } label: {
           Image(systemName: "clock.arrow.circlepath")
         }
-        .disabled(store.versions.isEmpty)
+        // Restore derives its version number from editor state; block it
+        // while a turn is streaming so it can't collide with the version the
+        // service is about to create from the database.
+        .disabled(store.versions.isEmpty || store.isStreaming)
         .accessibilityLabel("Version history")
       }
     }

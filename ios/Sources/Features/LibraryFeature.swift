@@ -11,6 +11,9 @@ struct LibraryFeature {
     var artifacts: IdentifiedArrayOf<Artifact> = []
     var isLoading = false
     var errorMessage: String?
+    /// Artifacts with a generation currently in flight — the service keeps
+    /// running these even while the user is here in the library.
+    var generatingArtifactIDs: Set<UUID> = []
   }
 
   enum Action: Equatable {
@@ -22,6 +25,7 @@ struct LibraryFeature {
     case artifactCreated(Artifact)
     case artifactTapped(Artifact)
     case deleteTapped(id: UUID)
+    case activeGenerationsChanged(Set<UUID>)
     case delegate(Delegate)
 
     enum Delegate: Equatable {
@@ -30,19 +34,32 @@ struct LibraryFeature {
   }
 
   @Dependency(\.databaseClient) var database
+  @Dependency(\.generationClient) var generation
   @Dependency(\.uuid) var uuid
   @Dependency(\.date) var date
+
+  private enum CancelID { case activeGenerations }
 
   var body: some ReducerOf<Self> {
     Reduce { state, action in
       switch action {
-      case .task, .refresh:
+      case .task:
         state.isLoading = state.artifacts.isEmpty
-        return .run { send in
-          try await send(.artifactsLoaded(database.fetchArtifacts()))
-        } catch: { error, send in
-          await send(.loadFailed(error.localizedDescription))
-        }
+        return .merge(
+          fetchArtifacts(),
+          // A long-lived subscription (the library sits at the stack root for
+          // the app's lifetime) reflecting which artifacts are generating.
+          .run { send in
+            for await ids in await generation.activeArtifactIDs() {
+              await send(.activeGenerationsChanged(ids))
+            }
+          }
+          .cancellable(id: CancelID.activeGenerations, cancelInFlight: true)
+        )
+
+      case .refresh:
+        state.isLoading = state.artifacts.isEmpty
+        return fetchArtifacts()
 
       case .artifactsLoaded(let artifacts):
         state.isLoading = false
@@ -79,9 +96,24 @@ struct LibraryFeature {
           await send(.loadFailed(error.localizedDescription))
         }
 
+      case .activeGenerationsChanged(let ids):
+        // If a generation finished while the user sat here, its artifact may
+        // have been retitled/touched — reload so titles and ordering refresh.
+        let anyFinished = !state.generatingArtifactIDs.subtracting(ids).isEmpty
+        state.generatingArtifactIDs = ids
+        return anyFinished ? .send(.refresh) : .none
+
       case .delegate:
         return .none
       }
+    }
+  }
+
+  private func fetchArtifacts() -> Effect<Action> {
+    .run { send in
+      try await send(.artifactsLoaded(database.fetchArtifacts()))
+    } catch: { error, send in
+      await send(.loadFailed(error.localizedDescription))
     }
   }
 }
@@ -113,15 +145,23 @@ struct LibraryView: View {
             Button {
               store.send(.artifactTapped(artifact))
             } label: {
-              VStack(alignment: .leading, spacing: 4) {
-                Text(artifact.title)
-                  .font(.headline)
-                  .foregroundStyle(.primary)
-                Text(
-                  "Updated \(artifact.updatedAt, format: .relative(presentation: .named))"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+              HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                  Text(artifact.title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                  Text(
+                    "Updated \(artifact.updatedAt, format: .relative(presentation: .named))"
+                  )
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                }
+                if store.generatingArtifactIDs.contains(artifact.id) {
+                  Spacer()
+                  ProgressView()
+                    .controlSize(.mini)
+                    .accessibilityLabel("Generating")
+                }
               }
             }
           }

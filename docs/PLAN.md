@@ -16,8 +16,30 @@
 >   restore, model picker fed by `/models`, FlyingFox `MockServer`
 >   TestSupport, and `GenerationFlowTests` integration suite (live client →
 >   localhost SSE → reducers → GRDB rows). Simulator CI green.
-> - ⬜ Phase 3 — editor polish
+> - 🚧 Phase 3 — editor polish (in progress): **persistent streaming
+>   service** landed — generation now survives leaving the editor.
 > - ⬜ Phase 4 — Android port
+>
+> **Persistent streaming (Phase 3):** the SSE turn used to be an `Effect`
+> owned by `EditorFeature`, a `StackState` element TCA tears down (and
+> cancels) on pop — so a response only completed while its chat UI stayed
+> foreground. Streaming now lives in an app-lifetime `GenerationService`
+> actor behind a `@DependencyClient` (`generationClient`): it owns the
+> per-artifact connection, the delta buffer, and the whole completion
+> pipeline (HTML extraction, DB-derived version numbering, title, all
+> persistence), so a turn survives any in-app navigation. The editor is now
+> a pure observer — on appear it subscribes to a per-artifact event feed
+> that replays a snapshot first (re-entry re-attaches to an in-flight turn)
+> then live deltas; `sendTapped` just builds a `GenerationTurn` and calls
+> `generation.start`. The library subscribes to an active-set feed and shows
+> a per-row "generating" spinner; at most one turn per artifact, but
+> different artifacts stream concurrently. Background handling is
+> best-effort: a `beginBackgroundTask` grace window (via
+> `BackgroundTaskClient`) plus a scene-phase checkpoint that upserts partial
+> text as failed, so nothing is lost if iOS suspends us; an interrupted turn
+> shows as failed/retryable. No relay server — a true background-URLSession
+> handoff (non-streaming, completes while suspended, local notification) is
+> noted as future work.
 >
 > **Deviations from the plan as written, discovered during execution:**
 >
