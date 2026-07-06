@@ -97,5 +97,5 @@ Note the scheme comes from `project.yml`'s `scheme.testTargets`, so
 Copy the workflow, then substitute: project path, scheme name, simulator
 device name (run once and read the "List available simulators" output if
 unsure), branch prefixes, and path filters. The
-[`ios-ci-setup`](../../.claude/skills/ios-ci-setup/SKILL.md) skill walks
+[`ios-ci-setup`](skills/ios-ci-setup/SKILL.md) skill walks
 through exactly this.

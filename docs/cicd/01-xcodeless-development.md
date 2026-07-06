@@ -94,5 +94,5 @@ Working CI-only shapes what "testable" means:
 - A README note telling humans how to get a local Xcode project
   (`brew install xcodegen; xcodegen generate`).
 
-The [`ios-ci-setup`](../../.claude/skills/ios-ci-setup/SKILL.md) skill
+The [`ios-ci-setup`](skills/ios-ci-setup/SKILL.md) skill
 automates this.

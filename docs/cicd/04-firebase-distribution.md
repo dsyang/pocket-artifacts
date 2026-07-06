@@ -117,7 +117,7 @@ typically under 25 minutes, almost all of it the Xcode build itself.
 
 ## Applying to another repo
 
-The [`ios-firebase-distribution`](../../.claude/skills/ios-firebase-distribution/SKILL.md)
+The [`ios-firebase-distribution`](skills/ios-firebase-distribution/SKILL.md)
 skill contains the workflow as a template plus the checklist above. The
 substitution points: project path, scheme, bundle ID, tester group alias,
 and (if not using XcodeGen) how the signing xcconfig attaches to the app

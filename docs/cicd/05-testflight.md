@@ -2,7 +2,7 @@
 
 > **Status in this repo:** designed (see `docs/PLAN.md` §8) but not yet
 > instantiated — there is no `.github/workflows/ios-testflight.yml` here
-> today. This doc + the [`ios-testflight`](../../.claude/skills/ios-testflight/SKILL.md)
+> today. This doc + the [`ios-testflight`](skills/ios-testflight/SKILL.md)
 > skill contain the complete ready-to-apply workflow; drop it into this
 > repo or any other when the channel is needed.
 
@@ -40,7 +40,7 @@ step, and signing mechanics, so running both is cheap.
 
 ## The workflow
 
-Full template: [`.claude/skills/ios-testflight/templates/ios-testflight.yml`](../../.claude/skills/ios-testflight/templates/ios-testflight.yml).
+Full template: [`skills/ios-testflight/templates/ios-testflight.yml`](skills/ios-testflight/templates/ios-testflight.yml).
 It is `ios-distribute.yml` with three substitutions:
 
 ### 1. App Store profile + unique build numbers

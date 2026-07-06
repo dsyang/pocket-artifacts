@@ -12,8 +12,9 @@ Connect API key — no fastlane, no deprecated `altool`, no Apple ID
 password/2FA in CI).
 
 Template: [`templates/ios-testflight.yml`](templates/ios-testflight.yml).
-Deep dive: `docs/cicd/03-code-signing.md` and `docs/cicd/05-testflight.md`
-in the pocket-artifacts repo.
+Deep dive: [`03-code-signing.md`](../../03-code-signing.md) and
+[`05-testflight.md`](../../05-testflight.md) in the playbook this skill
+ships with (`docs/cicd/` in the pocket-artifacts repo).
 
 **When to use vs Firebase App Distribution** (`ios-firebase-distribution`
 skill): TestFlight needs no UDID management and reaches up to 10,000

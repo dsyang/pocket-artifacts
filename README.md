@@ -32,10 +32,10 @@ There is no Xcode in the development environment — the project is plain text:
   target via `ios/Signing.xcconfig` (empty in the repo, written in CI).
 
 The whole CI/CD setup is documented as a reusable playbook in
-[`docs/cicd/`](docs/cicd/README.md), with portable skills in
-[`.claude/skills/`](.claude/skills/) that apply the same setup
+[`docs/cicd/`](docs/cicd/README.md) — docs plus portable skills in
+[`docs/cicd/skills/`](docs/cicd/skills/) that apply the same setup
 (simulator CI, Firebase App Distribution, TestFlight) to any other iOS
-app repo.
+app repo. That one directory is all you need to copy or reference.
 
 To work on it locally with Xcode:
 

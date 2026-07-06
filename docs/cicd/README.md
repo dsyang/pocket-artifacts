@@ -6,8 +6,11 @@ day-to-day development. These docs generalize the setup so it can be
 applied to any other iOS app repo.
 
 The portable, executable versions of these docs live in
-[`.claude/skills/`](../../.claude/skills/): copy a skill directory into
-another repo and ask Claude Code to apply it.
+[`skills/`](skills/) right here in the playbook — this `docs/cicd/`
+directory is the single thing to reference when applying the setup to
+another iOS repo. Either point Claude Code at a skill's `SKILL.md` and ask
+it to apply it, or copy a skill directory into the target repo's
+`.claude/skills/` to make it auto-discoverable there.
 
 ## The pipeline at a glance
 
@@ -42,9 +45,9 @@ push (ios/** changed)                 workflow_dispatch            workflow_disp
 
 | Skill | What it applies |
 | --- | --- |
-| [`ios-ci-setup`](../../.claude/skills/ios-ci-setup/SKILL.md) | Simulator build + test workflow (doc 01 + 02) |
-| [`ios-firebase-distribution`](../../.claude/skills/ios-firebase-distribution/SKILL.md) | Signed ad-hoc builds → Firebase App Distribution (doc 03 + 04) |
-| [`ios-testflight`](../../.claude/skills/ios-testflight/SKILL.md) | Signed App Store builds → TestFlight (doc 03 + 05) |
+| [`ios-ci-setup`](skills/ios-ci-setup/SKILL.md) | Simulator build + test workflow (doc 01 + 02) |
+| [`ios-firebase-distribution`](skills/ios-firebase-distribution/SKILL.md) | Signed ad-hoc builds → Firebase App Distribution (doc 03 + 04) |
+| [`ios-testflight`](skills/ios-testflight/SKILL.md) | Signed App Store builds → TestFlight (doc 03 + 05) |
 
 ## All repo secrets, in one table
 

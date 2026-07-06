@@ -13,8 +13,9 @@ no Apple review, no TestFlight processing queue.
 
 Templates: [`templates/ios-distribute.yml`](templates/ios-distribute.yml),
 [`templates/Signing.xcconfig`](templates/Signing.xcconfig). Deep dive:
-`docs/cicd/03-code-signing.md` and `docs/cicd/04-firebase-distribution.md`
-in the pocket-artifacts repo.
+[`03-code-signing.md`](../../03-code-signing.md) and
+[`04-firebase-distribution.md`](../../04-firebase-distribution.md) in the
+playbook this skill ships with (`docs/cicd/` in the pocket-artifacts repo).
 
 **Prerequisite:** working simulator CI (the `ios-ci-setup` skill) — get
 builds green before adding signing to the mix. Reuse its exact runner pin
@@ -134,7 +135,8 @@ a workflow edit), `set -o pipefail`, or the export method name
 
 ## Troubleshooting index
 
-Symptom → fix table lives in `docs/cicd/06-gotchas.md` (pocket-artifacts).
+Symptom → fix table lives in [`06-gotchas.md`](../../06-gotchas.md) in the
+playbook.
 Highlights: hang at codesign → partition list; "No profiles found" →
 name/UUID/location checklist; tester can't install → UDID not in profile
 (regenerate profile, update secret).

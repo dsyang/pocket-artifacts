@@ -12,8 +12,9 @@ GitHub Actions. After this, a green check means "compiles and tests pass"
 (Linux, remote agents), using CI as the only compiler.
 
 Template: [`templates/ios-build.yml`](templates/ios-build.yml). Deep
-explanation of every decision: `docs/cicd/01-xcodeless-development.md` and
-`docs/cicd/02-build-and-test.md` in the pocket-artifacts repo.
+explanation of every decision: [`01-xcodeless-development.md`](../../01-xcodeless-development.md)
+and [`02-build-and-test.md`](../../02-build-and-test.md) in the playbook
+this skill ships with (`docs/cicd/` in the pocket-artifacts repo).
 
 ## Step 1 — Survey the repo
 
