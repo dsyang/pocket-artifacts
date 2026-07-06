@@ -134,7 +134,10 @@ actor GenerationService {
         active[artifactID]?.content += delta
         broadcast(.delta(messageID: turn.assistantMessageID, text: delta), to: artifactID)
       }
-      await finish(artifactID: artifactID, outcome: .finished)
+      // AsyncThrowingStream may end normally (return nil) when the task is
+      // cancelled rather than throwing CancellationError, so check the flag.
+      let cancelled = active[artifactID]?.cancelRequested ?? false
+      await finish(artifactID: artifactID, outcome: cancelled ? .cancelled : .finished)
     } catch {
       let cancelled = active[artifactID]?.cancelRequested ?? false
       await finish(
