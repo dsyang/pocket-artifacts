@@ -203,18 +203,21 @@ final class EditorFeatureTests: XCTestCase {
     )
   }
 
-  func testSelectedModelPreferenceIsUsedForRequests() async {
+  func testArtifactModelIsUsedForRequests() async {
     let sentRequest = LockIsolated<ChatRequest?>(nil)
 
+    // Model choice is per-chat: it rides on the artifact, not a global pref.
+    var artifact = Self.artifact
+    artifact.model = "openai/gpt-5"
+
     let store = TestStore(
-      initialState: EditorFeature.State(artifact: Self.artifact, inputText: "make a timer")
+      initialState: EditorFeature.State(artifact: artifact, inputText: "make a timer")
     ) {
       EditorFeature()
     } withDependencies: {
       $0.uuid = .incrementing
       $0.date = .constant(Self.now)
       $0.keychainClient.apiKey = { "sk-or-test" }
-      $0.modelPreference.selectedModel = { "openai/gpt-5" }
       $0.openRouterClient.streamChat = { request in
         sentRequest.setValue(request)
         return AsyncThrowingStream { continuation in
@@ -229,7 +232,33 @@ final class EditorFeatureTests: XCTestCase {
     await store.send(.sendTapped)
     await store.receive(\.streamFinished)
     XCTAssertEqual(sentRequest.value?.model, "openai/gpt-5")
-    XCTAssertEqual(store.state.model, "openai/gpt-5")
+  }
+
+  func testPickingModelStoresItOnTheArtifactAndPersists() async {
+    let updated = LockIsolated<[Artifact]>([])
+
+    let store = TestStore(
+      initialState: EditorFeature.State(artifact: Self.artifact)
+    ) {
+      EditorFeature()
+    } withDependencies: {
+      $0.databaseClient.updateArtifact = { artifact in
+        updated.withValue { $0.append(artifact) }
+      }
+    }
+
+    await store.send(.modelButtonTapped) {
+      $0.modelPicker = ModelPickerFeature.State(
+        selectedModel: OpenRouterClient.defaultModel
+      )
+    }
+    await store.send(.modelPicker(.presented(.modelSelected("openai/gpt-5")))) {
+      $0.modelPicker?.selectedModel = "openai/gpt-5"
+    }
+    await store.receive(.modelPicker(.presented(.delegate(.modelSelected("openai/gpt-5"))))) {
+      $0.artifact.model = "openai/gpt-5"
+    }
+    XCTAssertEqual(updated.value.last?.model, "openai/gpt-5")
   }
 
   func testNoFenceResponseIsPlainChatTurn() async {

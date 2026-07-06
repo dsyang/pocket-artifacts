@@ -40,8 +40,33 @@ struct ChatView: View {
           .padding(.bottom, 4)
       }
 
+      modelBar
       inputBar
     }
+  }
+
+  /// The model this chat generates with — tap to change it, just for this
+  /// chat. Model choice is per-artifact, so it lives next to the input bar
+  /// rather than in app-wide Settings.
+  private var modelBar: some View {
+    Button {
+      store.send(.modelButtonTapped)
+    } label: {
+      HStack(spacing: 4) {
+        Image(systemName: "cpu")
+        Text(store.artifact.model)
+          .font(.system(.footnote, design: .monospaced))
+          .lineLimit(1)
+          .truncationMode(.middle)
+        Image(systemName: "chevron.up.chevron.down")
+          .font(.caption2)
+      }
+      .foregroundStyle(.secondary)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .buttonStyle(.plain)
+    .padding(.horizontal)
+    .accessibilityLabel("Model: \(store.artifact.model)")
   }
 
   private var emptyHint: some View {
