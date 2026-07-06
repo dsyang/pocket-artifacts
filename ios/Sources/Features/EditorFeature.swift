@@ -1,10 +1,14 @@
 import ComposableArchitecture
 import Foundation
 
-/// The chat-driven editor for one artifact: send a prompt, stream the
-/// response into an in-flight assistant bubble, extract the HTML fence when
-/// the stream finishes, persist a new version, and flip to the preview tab.
-/// The transcript and versions are loaded from the database on appear.
+/// The chat-driven editor for one artifact: send a prompt, watch the
+/// response stream into an in-flight assistant bubble, and flip to the
+/// preview tab when a new version lands. The streaming itself is owned by the
+/// app-lifetime `GenerationService`, not this reducer — the editor only
+/// *observes* a turn, so navigating away no longer cancels it. On appear the
+/// editor subscribes to the service's per-artifact event feed (which replays
+/// a snapshot of any in-flight turn, so re-entry re-attaches) and loads the
+/// persisted transcript and versions.
 @Reducer
 struct EditorFeature {
   @ObservableState
@@ -40,9 +44,11 @@ struct EditorFeature {
     case loadFailed(String)
     case sendTapped
     case cancelStreamTapped
-    case streamDelta(String)
-    case streamFinished
-    case streamFailed(String)
+    /// One event from the generation service's feed for this artifact.
+    case generation(GenerationEvent)
+    /// The service already had an in-flight turn for this artifact, so the
+    /// optimistic bubbles are rolled back and the input restored.
+    case startRejected(userMessageID: UUID, assistantMessageID: UUID, prompt: String)
     case saveFailed(String)
     case historyButtonTapped
     case modelButtonTapped
@@ -55,14 +61,14 @@ struct EditorFeature {
     }
   }
 
-  @Dependency(\.openRouterClient) var openRouter
+  @Dependency(\.generationClient) var generation
   @Dependency(\.keychainClient) var keychain
   @Dependency(\.databaseClient) var database
   @Dependency(\.uuid) var uuid
   @Dependency(\.date) var date
 
   private enum CancelID {
-    case stream
+    case observation
   }
 
   var body: some ReducerOf<Self> {
@@ -73,13 +79,22 @@ struct EditorFeature {
         return .none
 
       case .task:
+        // Subscribe to the service's event feed *before* loading the
+        // transcript: the snapshot (and any deltas or completion that land
+        // while the load is in flight) are buffered by the stream and
+        // replayed after `.loaded`, so nothing is missed on re-entry.
         return .run { [artifactID = state.artifact.id] send in
+          let events = await generation.events(artifactID: artifactID)
           let messages = try await database.fetchMessages(artifactID: artifactID)
           let versions = try await database.fetchVersions(artifactID: artifactID)
           await send(.loaded(messages: messages, versions: versions))
+          for await event in events {
+            await send(.generation(event))
+          }
         } catch: { error, send in
           await send(.loadFailed(error.localizedDescription))
         }
+        .cancellable(id: CancelID.observation, cancelInFlight: true)
 
       case .loaded(let messages, let versions):
         state.messages = IdentifiedArray(uniqueElements: messages)
@@ -114,74 +129,92 @@ struct EditorFeature {
         state.streamingMessageID = assistantID
         state.isStreaming = true
 
-        return .merge(
-          persist { [artifact = state.artifact] database in
-            try await database.saveMessage(message: userMessage, artifactID: artifact.id)
-            try await database.updateArtifact(artifact)
-          },
-          .run { [openRouter] send in
-            for try await delta in try await openRouter.streamChat(request) {
-              await send(.streamDelta(delta))
-            }
-            await send(.streamFinished)
-          } catch: { error, send in
-            await send(.streamFailed(error.localizedDescription))
-          }
-          .cancellable(id: CancelID.stream, cancelInFlight: true)
+        let turn = GenerationTurn(
+          artifact: state.artifact,
+          userMessage: userMessage,
+          assistantMessageID: assistantID,
+          request: request
         )
+        return .run { send in
+          let started = await generation.start(turn)
+          if !started {
+            await send(
+              .startRejected(
+                userMessageID: userMessage.id, assistantMessageID: assistantID, prompt: prompt
+              )
+            )
+          }
+        }
 
-      case .streamDelta(let delta):
-        guard let id = state.streamingMessageID else { return .none }
-        state.messages[id: id]?.content += delta
-        return .none
-
-      case .streamFinished:
-        state.isStreaming = false
-        guard let id = state.streamingMessageID else { return .none }
-        state.streamingMessageID = nil
-        guard let message = state.messages[id: id], !message.content.isEmpty else {
-          state.messages.remove(id: id)
+      case .generation(.snapshot(let snapshot)):
+        guard let snapshot else {
+          // Idle: make sure a stale streaming state isn't left showing.
+          state.isStreaming = false
+          state.streamingMessageID = nil
           return .none
         }
-        guard let html = HTMLExtractor.extract(from: message.content) else {
-          // A plain chat turn (question answered, no app change): persist
-          // the message but create no version.
-          return persist { [artifactID = state.artifact.id] database in
-            try await database.saveMessage(message: message, artifactID: artifactID)
-          }
+        // Re-attach to a turn already in flight (a re-entering editor).
+        state.isStreaming = true
+        state.streamingMessageID = snapshot.messageID
+        if state.messages[id: snapshot.messageID] != nil {
+          // A checkpoint row loaded from the DB — un-fail it and catch it up.
+          state.messages[id: snapshot.messageID]?.content = snapshot.partialContent
+          state.messages[id: snapshot.messageID]?.isFailed = false
+        } else {
+          state.messages.append(
+            ChatMessage(id: snapshot.messageID, role: .assistant, content: snapshot.partialContent)
+          )
         }
+        return .none
 
-        let version = ArtifactVersion(
-          id: uuid(),
-          artifactID: state.artifact.id,
-          number: (state.versions.last?.number ?? 0) + 1,
-          html: html,
-          createdAt: date()
-        )
-        state.versions.append(version)
-        if let title = HTMLExtractor.title(from: html) {
-          state.artifact.title = title
-        }
-        state.artifact.updatedAt = date()
-        state.tab = .preview
-        return persist { [artifact = state.artifact] database in
-          try await database.saveMessage(message: message, artifactID: artifact.id)
-          try await database.createVersion(version)
-          try await database.updateArtifact(artifact)
-        }
+      case .generation(.delta(let messageID, let text)):
+        guard state.streamingMessageID == messageID else { return .none }
+        state.messages[id: messageID]?.content += text
+        return .none
 
-      case .streamFailed(let message):
+      case .generation(.completed(let result)):
         state.isStreaming = false
-        state.errorMessage = message
-        return persistFinishedInFlightMessage(&state)
+        state.streamingMessageID = nil
+        if let message = result.message {
+          if state.messages[id: message.id] != nil {
+            state.messages[id: message.id] = message
+          } else {
+            state.messages.append(message)
+          }
+        } else {
+          state.messages.remove(id: result.messageID)
+        }
+        // The service already persisted everything; idempotently mirror the
+        // result into state (a version may already be present if this editor
+        // loaded it from the DB after re-entering post-completion).
+        if let version = result.version, state.versions[id: version.id] == nil {
+          state.versions.append(version)
+          state.tab = .preview
+        }
+        if let artifact = result.artifact {
+          state.artifact = artifact
+        }
+        if let errorMessage = result.errorMessage {
+          state.errorMessage = errorMessage
+        }
+        return .none
+
+      case let .startRejected(userMessageID, assistantMessageID, prompt):
+        state.isStreaming = false
+        state.streamingMessageID = nil
+        state.messages.remove(id: assistantMessageID)
+        state.messages.remove(id: userMessageID)
+        // The incoming snapshot will re-attach us to the real in-flight turn;
+        // give the user their unsent prompt back to retry afterward.
+        if state.inputText.isEmpty { state.inputText = prompt }
+        return .none
 
       case .cancelStreamTapped:
         guard state.isStreaming else { return .none }
         state.isStreaming = false
-        return .merge(
-          .cancel(id: CancelID.stream),
-          persistFinishedInFlightMessage(&state)
-        )
+        return .run { [artifactID = state.artifact.id] _ in
+          await generation.cancel(artifactID: artifactID)
+        }
 
       case .historyButtonTapped:
         state.versionHistory = VersionHistoryFeature.State(
@@ -250,23 +283,6 @@ struct EditorFeature {
       try await operation(database)
     } catch: { error, send in
       await send(.saveFailed(error.localizedDescription))
-    }
-  }
-
-  /// After a failure or cancellation: keep any partial text visible but
-  /// marked failed (so it's excluded from future context) and persist it;
-  /// drop the bubble entirely if nothing arrived.
-  private func persistFinishedInFlightMessage(_ state: inout State) -> Effect<Action> {
-    guard let id = state.streamingMessageID else { return .none }
-    state.streamingMessageID = nil
-    guard state.messages[id: id]?.content.isEmpty == false else {
-      state.messages.remove(id: id)
-      return .none
-    }
-    state.messages[id: id]?.isFailed = true
-    guard let message = state.messages[id: id] else { return .none }
-    return persist { [artifactID = state.artifact.id] database in
-      try await database.saveMessage(message: message, artifactID: artifactID)
     }
   }
 }
