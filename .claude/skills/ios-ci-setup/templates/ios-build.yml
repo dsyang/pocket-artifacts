@@ -1,0 +1,71 @@
+# Primary in-session verification loop: push → this compiles and tests →
+# fix errors. The runner is pinned deliberately — when CI is the only
+# compiler, a floating alias flipping to a new image (new Xcode/SDK/
+# simulator set) would break builds with no repo change to explain it.
+# Within the image we select the newest Xcode __XCODE_MAJOR__.x present
+# (and print it), so minor image updates don't require a repo change.
+# Runner bumps happen as isolated commits when deprecation warnings appear.
+name: iOS Build & Test
+
+# Path-filtered to iOS code (and this file) so docs-only pushes don't
+# burn a macOS runner.
+on:
+  push:
+    branches: __BRANCHES__
+    paths:
+      - "__IOS_DIR__/**"
+      - ".github/workflows/ios-build.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: __RUNNER_IMAGE__
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode __XCODE_MAJOR__
+        run: |
+          ls -d /Applications/Xcode*.app
+          XCODE_APP="$(ls -d /Applications/Xcode___XCODE_MAJOR__*.app | sort -V | tail -1)"
+          echo "Selected: $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install tools
+        run: brew install xcodegen xcbeautify
+
+      # Delete this step (and xcodegen above) if the repo checks in its
+      # .xcodeproj instead of using XcodeGen.
+      - name: Generate Xcode project
+        run: xcodegen generate
+        working-directory: __IOS_DIR__
+
+      # Kept permanently: when a runner image update renames simulators,
+      # this output is how you pick the new destination.
+      - name: List available simulators
+        run: xcrun simctl list devices available | head -40
+
+      # ENABLE_DEBUG_DYLIB=NO: the SwiftUI-previews debug dylib fails to
+      # link against SPM package-product frameworks in CI (undefined
+      # symbols from transitive products); previews aren't used here.
+      # CODE_SIGNING_ALLOWED=NO: simulator builds need no signing.
+      # -skipMacroValidation/-skipPackagePluginValidation: swift-syntax
+      # macros and SPM plugins otherwise require interactive trust
+      # approval, which hangs headless CI.
+      - name: Build and test (iPhone simulator)
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project __IOS_DIR__/__PROJECT_NAME__.xcodeproj \
+            -scheme __SCHEME__ \
+            -destination 'platform=iOS Simulator,name=__SIMULATOR_NAME__' \
+            -skipMacroValidation \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_DEBUG_DYLIB=NO \
+            2>&1 | xcbeautify --renderer github-actions
